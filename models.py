@@ -1,23 +1,38 @@
 from typing import Optional
 from sqlmodel import SQLModel, Field, create_engine, Session
 from sqlalchemy import Engine
-from pydantic import BaseModel, EmailStr
+from pydantic import EmailStr
 
 
-
-
-class UserSchema(BaseModel):
-    name: str
+class UserBase(SQLModel):
+    name: str 
     email: EmailStr
-    password: str
 
 
+class UserSchema(UserBase):
+    password: str 
 
-class UserDB(SQLModel, table=True):
+
+class UserDB(UserBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    name: str
-    email: str
+    hashed_password: str = Field()
+
+
+class UserSchemaSignIn(SQLModel):
     password: str
+    email: EmailStr
+
+
+class UserSchemaFlex(UserSchema):
+    id: int
+
+
+class UserschemaUpdate(SQLModel):
+    name: str | None = None
+    email: EmailStr | None = None
+    password: str | None = None
+
+
 
 
 
@@ -34,9 +49,6 @@ def createdb_and_tables():
 
 
 def get_session():
-    session = Session(get_engine())
-    try:
+    with Session(get_engine()) as session:
         yield session
-    finally:
-        session.close()
 
