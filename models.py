@@ -1,7 +1,7 @@
 from typing import Optional
 from sqlmodel import SQLModel, Field, create_engine, Session
 from sqlalchemy import Engine
-from pydantic import EmailStr
+from pydantic import EmailStr, BaseModel
 
 
 class UserBase(SQLModel):
@@ -27,13 +27,19 @@ class UserSchemaFlex(UserSchema):
     id: int
 
 
-class UserschemaUpdate(SQLModel):
-    name: str | None = None
+# class UserschemaUpdate(SQLModel):
+#     name: str | None = None
+#     email: EmailStr | None = None
+#     password: str | None = None
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
+class TokenData(BaseModel):
     email: EmailStr | None = None
-    password: str | None = None
-
-
-
 
 
 
