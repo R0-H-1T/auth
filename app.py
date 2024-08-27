@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Query, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from contextlib import asynccontextmanager
-from models import createdb_and_tables, UserSchema, get_session, UserDB, UserSchemaSignIn, Token, TokenData
+from models import createdb_and_tables, UserSchema, get_session, UserDB, Token, TokenData
 from pydantic import ValidationError
 from sqlmodel import select, Session
 from helper import hash_password, verify_password, create_access_token
@@ -10,7 +10,9 @@ from typing import Annotated
 from datetime import timedelta
 import os
 from joserfc import jwt
-from jwt.exceptions import InvalidTokenError
+from joserfc.jwk import OctKey
+from joserfc.jwt import JWTClaimsRegistry
+from joserfc.errors import ExpiredTokenError
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -18,7 +20,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan, title="Auth Service")
 
 load_dotenv(find_dotenv())
 
@@ -31,9 +33,14 @@ async def root() -> dict:
     return {"hello": "world"}
 
 
+'''
+could raise email errror, expiredtoken, db_user none
+'''
 async def get_current_user(
-        token: Annotated[str, Depends(oauth2_scheme)], 
+        token: Annotated[str, Depends(oauth2_scheme)],
         session: Session = Depends(get_session)):
+
+    print("@ get_current_user()")
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -41,21 +48,24 @@ async def get_current_user(
     )
 
     try:
-        payload = jwt.decode(token, os.getenv('SECRET'), algorithms=[os.getenv('ALGORITHM')])
-        email = payload.claims.get('sub')        
-        print(payload.claims.get('exp'))
+        payload = jwt.decode(token, key=OctKey.import_key(os.getenv("SECRET")))
+        JWTClaimsRegistry().validate(payload.claims)
+        print(payload.claims)
+        email = payload.claims.get('sub')
+        # print(payload.claims.get('exp'))
         if email is None:
+            print("*"*10, "no email")
             raise credentials_exception
-        token_data = TokenData(email = email)
-    except InvalidTokenError:
+        token_data = TokenData(email=email)        
+    except ExpiredTokenError:
+        print("*"*10, "expired")
         raise credentials_exception
-
-    db_user = session.exec(select(UserDB).where(UserDB.email == token_data.email)).first()
-    if db_user is None:
-        raise credentials_exception
-    
-    return db_user
-    
+    else:
+        db_user = session.exec(select(UserDB).where(
+            UserDB.email == token_data.email)).first()
+        if db_user is None:
+            raise credentials_exception
+        return True
 
 
 @app.post('/signup', tags=['user'], response_model=UserSchema, status_code=status.HTTP_201_CREATED)
@@ -63,21 +73,23 @@ async def signup(user: UserSchema, session: Session = Depends(get_session)):
 
     hash_pass = hash_password(user.password)
     try:
-        db_user = UserDB.model_validate(user, update={'hashed_password': hash_pass})
+        db_user = UserDB.model_validate(
+            user, update={'hashed_password': hash_pass})
         session.add(db_user)
         session.commit()
         session.refresh(db_user)
     except ValidationError as e:
-        print('Wrong type: ', e.title)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Model Validation failed: UserDB")
 
     return user
 
 
 @app.post('/signin', tags=['user'], status_code=status.HTTP_200_OK)
 async def signin(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], session: Session = Depends(get_session)) -> Token:
-
+    print("@/signin")
     # form_data.username contains email
-    db_user = session.exec(select(UserDB).where(UserDB.email == form_data.username)).first()
+    db_user = session.exec(select(UserDB).where(
+        UserDB.email == form_data.username)).first()
 
     if not db_user:
         raise HTTPException(
@@ -85,13 +97,12 @@ async def signin(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], ses
 
     if not verify_password(form_data.password, db_user.hashed_password):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail='Incorrect username or password', headers={'WWW-Authenticate': 'Bearer'}
-            )
+            status_code=status.HTTP_401_UNAUTHORIZED, detail='Incorrect username or password'
+        )
 
-    access_token_expires = timedelta(
-        minutes=int(os.getenv('ACCESS_TOKEN_EXPIRE_MIN')))
     access_token = create_access_token(
-        data={"sub": db_user.email}, expires_delta=access_token_expires
+        data={"sub": db_user.email},
+        expires_delta=timedelta(minutes=int(os.getenv('ACCESS_TOKEN_EXPIRE_MIN')))
     )
     return Token(access_token=access_token, token_type='bearer')
 
@@ -99,6 +110,13 @@ async def signin(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], ses
 @app.get('/allusers', tags=['user'], response_model=list[UserDB])
 async def get_user(offset: int = 0, limit: int = Query(default=100, le=100), session: Session = Depends(get_session)) -> list:
     return session.exec(select(UserDB).offset(offset).limit(limit)).all()
+
+
+
+@app.get('/token', tags=['user'], status_code=status.HTTP_200_OK)
+async def validate_token(res = Depends(get_current_user)):
+    if not res:
+        return {"detail", "Error in /token endpoint"}
 
 
 
@@ -130,3 +148,13 @@ def read_usesrs_me(user: Annotated[UserDB, Depends(get_current_user)]):
 # if __name__ == "__main__":
 #     # app.run(port=3000, debug=False)
 #     pass
+
+
+'''
+curl -X 'GET' \
+  'http://localhost:8000/token' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization:bearer ' 
+
+'''
