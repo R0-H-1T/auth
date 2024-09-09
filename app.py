@@ -1,10 +1,10 @@
-from fastapi import FastAPI, Query, HTTPException, status, Depends
+from fastapi import FastAPI, Query, HTTPException, status, Depends, Header
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from contextlib import asynccontextmanager
 from models import createdb_and_tables, UserSchema, get_session, UserDB, Token, TokenData
 from pydantic import ValidationError
 from sqlmodel import select, Session
-from helper import hash_password, verify_password, create_access_token
+from helper import hash_password, verify_password, create_access_token, deacode_access_token, validate_user_token
 from dotenv import load_dotenv, find_dotenv
 from typing import Annotated
 from datetime import timedelta
@@ -36,36 +36,17 @@ async def root() -> dict:
 '''
 could raise email errror, expiredtoken, db_user none
 '''
-async def get_current_user(
+async def validate_user(
         token: Annotated[str, Depends(oauth2_scheme)],
         session: Session = Depends(get_session)):
-
-    print("@ get_current_user()")
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={'WWW-Authenticate': 'Bearer'}
-    )
-
-    try:
-        payload = jwt.decode(token, key=OctKey.import_key(os.getenv("SECRET")))
-        JWTClaimsRegistry().validate(payload.claims)
-        print(payload.claims)
-        email = payload.claims.get('sub')
-        # print(payload.claims.get('exp'))
-        if email is None:
-            print("*"*10, "no email")
-            raise credentials_exception
-        token_data = TokenData(email=email)        
-    except ExpiredTokenError:
-        print("*"*10, "expired")
-        raise credentials_exception
-    else:
-        db_user = session.exec(select(UserDB).where(
-            UserDB.email == token_data.email)).first()
-        if db_user is None:
-            raise credentials_exception
-        return True
+    
+    claims = deacode_access_token(token)
+    
+    db_user = session.exec(select(UserDB).where(
+        UserDB.email == claims.get('sub'))).first()
+    if db_user is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No user found!")
+    return claims
 
 
 @app.post('/signup', tags=['user'], response_model=UserSchema, status_code=status.HTTP_201_CREATED)
@@ -88,8 +69,7 @@ async def signup(user: UserSchema, session: Session = Depends(get_session)):
 async def signin(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], session: Session = Depends(get_session)) -> Token:
     print("@/signin")
     # form_data.username contains email
-    db_user = session.exec(select(UserDB).where(
-        UserDB.email == form_data.username)).first()
+    db_user = session.exec(select(UserDB).where(UserDB.email == form_data.username)).first()
 
     if not db_user:
         raise HTTPException(
@@ -100,6 +80,7 @@ async def signin(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], ses
             status_code=status.HTTP_401_UNAUTHORIZED, detail='Incorrect username or password'
         )
 
+    print(db_user.email)
     access_token = create_access_token(
         data={"sub": db_user.email},
         expires_delta=timedelta(minutes=int(os.getenv('ACCESS_TOKEN_EXPIRE_MIN')))
@@ -114,15 +95,34 @@ async def get_user(offset: int = 0, limit: int = Query(default=100, le=100), ses
 
 
 @app.get('/token', tags=['user'], status_code=status.HTTP_200_OK)
-async def validate_token(res = Depends(get_current_user)):
+async def validate_token(res = Depends(validate_user)):
     if not res:
         return {"detail", "Error in /token endpoint"}
-
-
+    return res
+    
 
 @app.get('/users/me', tags=['user'], response_model=UserDB)
-def read_usesrs_me(user: Annotated[UserDB, Depends(get_current_user)]):
-    return user
+def read_usesrs_me(token: Annotated[str, Depends(oauth2_scheme)], session: Session = Depends(get_session)):
+    claims = validate_user_token(token, session)
+    db_user = session.exec(select(UserDB).where(UserDB.email == claims.get('sub'))).first()
+    return db_user
+
+
+
+@app.get('/host_role', tags=['roles'], status_code=status.HTTP_200_OK)
+async def host_role(token: Annotated[str, Depends(oauth2_scheme)], session: Session = Depends(get_session)):
+    claims = validate_user_token(token, session)
+    return claims 
+
+
+    # if claims:
+    #     print(claims.get('sub'))
+    #     updated_token = create_access_token(data={'sub': claims.get('sub'), 'roles':['host']})
+    #     return Token(access_token=updated_token, token_type="Bearer")
+    # return {'details': 'Already a host'}
+
+
+
 
 # @TODO - patch for email and password
 # @app.patch('/users/{user_id}', response_model=UserSchema, tags=['user'])

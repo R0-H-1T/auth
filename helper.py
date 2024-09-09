@@ -1,33 +1,65 @@
 from passlib.handlers import pbkdf2
 from datetime import timedelta, datetime, timezone
 from joserfc import jwt
-from joserfc.jwk import OctKey
 from dotenv import load_dotenv, find_dotenv
+from sqlmodel import Session, select
 import os
+from fastapi import HTTPException, status, Depends
+from joserfc.jwk import OctKey
+from joserfc.jwt import JWTClaimsRegistry
+from joserfc.errors import ExpiredTokenError
+from models import TokenData, get_session, UserDB
 
 load_dotenv(find_dotenv())
 
-
-'''
-expired_delta expect time min/sec that is passed by the calling function.
-
-If time is set by env:
-    then set expire 
-else 
-    default to 60s
-'''
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()     
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(seconds=120)
+        expire = datetime.now(timezone.utc) + timedelta(seconds=300)
     to_encode.update({'exp': expire})
     print(to_encode)
     encoded_jwt = jwt.encode(claims=to_encode, header={'alg': 'HS256'}, key=OctKey.import_key(os.getenv("SECRET")))
-    print(encoded_jwt)  
     return encoded_jwt
     
+
+
+def deacode_access_token(token: str):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentialss",
+        headers={'WWW-Authenticate': 'Bearer'}
+    )
+    try:
+        payload = jwt.decode(token, key=OctKey.import_key(os.getenv("SECRET")))
+        JWTClaimsRegistry().validate(payload.claims)
+        # print(f'Here are the claims: {payload.claims}')
+        email = payload.claims.get('sub')
+        if email is None:
+            print("*"*10, "no email")
+            raise credentials_exception
+    except ExpiredTokenError:
+        print("*"*10, "expired")
+        raise credentials_exception
+    return payload.claims
+
+
+
+def validate_user_token(token, session: Session):
+    claims = deacode_access_token(token)
+    
+    # print(f'The roles are: {claims.get("roles")}')
+    # if claims.get('roles') and 'host' in claims.get('roles'):
+    #     print('alreade a host')
+    #     return None
+
+    db_user = session.exec(select(UserDB).where(UserDB.email == claims.get('sub'))).first()
+
+    if db_user is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No user found!")
+    return claims
+
 
 def hash_password(password: str) -> str:
     return pbkdf2.pbkdf2_sha256.hash(password)
