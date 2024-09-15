@@ -1,51 +1,54 @@
-> What you'll do in the holidays
+# Auth Service
 
-1. Buid your portfolio
-2. Redis and quizz application
-3. Git Submodules -> auth, quizz
-4. Your project - docker, __init__ module
-5. API gateway?
-6. Deploying your microservice - You have AWS right.
-7. what is service discovery
-8. More on asynchronous in service, what is it really. Asynchronous Programming?
-9. Git tree workflow
+### Work In Progress
 
 
-## Quizz Application
+> @TODOS
 
----
-
-**Microservice Architecture**
-> Tech Used:
-1. FastAPI
-2. SQLModel
-3. ---Coming up
+1. Blocklist JWT tokens (Redis)
+2. Git Submodule -> auth, qna, analytics
+3. Your project - docker, __init__ module
+4. API gateway?
+5. Deploying your microservice.
+6. More on service discovery?
 
 
 
-**Endpoints**
-auth:
-1. /signin - return a token after validating the user.
-2. /signup - user data stored in DB
-3. /token - 
-4. /users/me
 
-qna:
-1. /question
+## Endpoints
+
+| **Endpoint** | **Desc**
+--- | ---
+`/signin` | return a token after validating the user.
+`/signup` |  user data stored in DB
+`/signout` |  token revoked and added to blocklist 
+`/token`  |  credential validation 
+`/users/me` |  details about logged in user
+`/allusers` |  List of all usernames
 
 
 
 
 
+### How is the token blocklist implemented?
+**Understanding the flow of the token.**
+1. User signs in, a token holding the `jti` claim(Registered), used for uniquely identifying the token, is sent back. 
+2. Upon each request to the API endpoints, the token is checked against the blocklist of invalid tokens. 
+3. If the token is present in the list, a `401 Unauthorized` status is sent back.
+4. User signs out, the token is added to the blocklist, with the key as the `jti` value and its value as an empty string.
 
-@TODO An endpoint to get the current user, so that you associate the questionnaire with the user or answer.
-
-/question
-    - Validates the user from **auth service** @ /token
-    - creates the questionnaire
 
 
-
-### Scenario 1:
-auth service maintains a DB, storing the users roles.
-
+**Implementation**
+1. **REVOKE**: The token is stored in `Redis` as key value pair. <br>
+    key : `JTI` claim<br>
+    value : ''
+    ```python
+    # ex - seconds
+    redis_client.set(name=claims.get('jti'), value='', ex=120)
+    ```
+2. **VALIDATE**: On each request the token is checked agains the block list. If the token is present in the list, an unauthorized status is sent back.
+    ```python
+    redis_client.get(claims.get('jti'))
+    ```
+**File:** [View](https://github.com/R0-H-1T/auth/blob/dev/helper.py)
