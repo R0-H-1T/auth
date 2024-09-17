@@ -7,11 +7,7 @@
 
 1. Blocklist JWT tokens (Redis)
 2. Git Submodule -> auth, qna, analytics
-3. Your project - docker, __init__ module
-4. API gateway?
-5. Deploying your microservice.
-6. More on service discovery?
-
+3. Dockerize... pending 
 
 
 
