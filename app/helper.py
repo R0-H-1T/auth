@@ -9,13 +9,13 @@ from fastapi import HTTPException, status
 from joserfc.jwk import OctKey
 from joserfc.jwt import JWTClaimsRegistry
 from joserfc.errors import ExpiredTokenError
-from models import UserDB
+from . models import UserDB
 import redis
 from uuid import uuid4
 
 
 redis_client = redis.Redis(
-    host="localhost", port=6379, charset="utf-8", decode_responses=True, db=2
+    host="redis-cont-conf", port=6379, charset="utf-8", decode_responses=True, db=2
 )
 
 load_dotenv(find_dotenv())
