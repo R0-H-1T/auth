@@ -15,7 +15,11 @@ from uuid import uuid4
 
 
 redis_client = redis.Redis(
-    host="redis-cont-conf", port=6379, charset="utf-8", decode_responses=True, db=2
+	host = os.environ.get('REDIS_DNS') or "localhost",
+    port=6379, 
+    charset="utf-8", 
+    decode_responses=True, 
+    db=2
 )
 
 load_dotenv(find_dotenv())

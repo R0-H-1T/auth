@@ -19,6 +19,7 @@ from datetime import timedelta
 import os
 
 
+# @TODO redis setup, port logging, load env variables 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     createdb_and_tables()
