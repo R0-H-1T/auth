@@ -1,10 +1,10 @@
 from fastapi import FastAPI, Query, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from contextlib import asynccontextmanager
-from models import createdb_and_tables, UserSchema, get_session, UserDB, Token
+from . models import createdb_and_tables, UserSchema, get_session, UserDB, Token
 from pydantic import ValidationError
 from sqlmodel import select, Session
-from helper import (
+from . helper import (
     hash_password,
     verify_password,
     create_access_token,
@@ -19,6 +19,7 @@ from datetime import timedelta
 import os
 
 
+# @TODO redis setup, port logging, load env variables 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     createdb_and_tables()

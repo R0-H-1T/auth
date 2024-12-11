@@ -48,7 +48,7 @@ class TokenData(BaseModel):
 
 
 def get_engine() -> Engine:
-    return create_engine("sqlite:///database.db")
+    return create_engine("sqlite:///auth_db.db")
 
 
 def createdb_and_tables():
