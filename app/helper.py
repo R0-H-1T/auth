@@ -1,11 +1,12 @@
+from typing_extensions import Doc
 from passlib.handlers import pbkdf2
 from datetime import timedelta, datetime, timezone
 from joserfc import jwt
 from dotenv import load_dotenv, find_dotenv
 from sqlmodel import Session, select
 import os
-from typing import Dict
-from fastapi import HTTPException, status
+from typing import Annotated, Dict
+from fastapi import Form, HTTPException, status
 from joserfc.jwk import OctKey
 from joserfc.jwt import JWTClaimsRegistry
 from joserfc.errors import ExpiredTokenError
@@ -25,7 +26,35 @@ redis_client = redis.Redis(
 load_dotenv(find_dotenv())
 
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+class OAuth2RefreshRequestForm:
+    def __init__(
+            self,
+            *,
+            grant_type: Annotated[
+                str,
+                Form(pattern='refresh_token'),
+                Doc(
+                    """
+                    The OAuth2 spec says it is required and MUST be the fixed string
+                    "refresh_token".
+                    """
+                )
+            ],
+            refresh_token: Annotated[
+                str,
+                Form(),
+                Doc(
+                    """
+                    The refresh token to use
+                    """
+                )
+            ]
+    ):
+        self.grant_type = grant_type
+        self.refresh_token = refresh_token
+        
+
+def create_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
@@ -41,10 +70,10 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     return encoded_jwt
 
 
-def deacode_access_token(token: str):
+def decode_access_token(token: str):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentialss",
+        detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
@@ -65,7 +94,7 @@ def deacode_access_token(token: str):
 
 
 def validate_user_token(token, session: Session):
-    claims = deacode_access_token(token)
+    claims = decode_access_token(token)
 
     token_in_blocklist(claims)
 

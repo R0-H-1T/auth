@@ -52,3 +52,20 @@
     redis_client.get(claims.get('jti'))
     ```
 **File:** [View](https://github.com/R0-H-1T/auth/blob/dev/helper.py)
+
+
+
+## TODOS:
+1. Implement refresh tokens
+2. PyTest?
+3. Redis Caching? - qna-svc(Questionnaires)
+
+## Refresh token issues - 
+When the user signs in [/signin]
+    Access token (5 mins)
+    Refresh token (10 mins)
+returned to user
+
+When user signs out [/signout]
+    Access token is added to redis - blacklist token in redis using the JTI claim.
+    
