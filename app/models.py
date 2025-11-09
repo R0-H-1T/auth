@@ -1,8 +1,8 @@
 from sqlmodel import SQLModel, Field, create_engine, Session
-from sqlalchemy import Engine
+from sqlalchemy import Engine, URL
 from pydantic import EmailStr, BaseModel
 import uuid
-import uuid
+import os
 
 
 class UserBase(SQLModel):
@@ -15,7 +15,6 @@ class UserSchema(UserBase):
 
 
 class UserDB(UserBase, table=True):
-    # id: Optional[int] = Field(default=None, primary_key=True)
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str = Field()
 
@@ -45,11 +44,15 @@ class TokenData(BaseModel):
     email: EmailStr | None = None
 
 
-# rohit = UserDB(name="rohit", email="rohit@gmail.com", password='pass')
-
-
 def get_engine() -> Engine:
-    return create_engine("sqlite:///auth_db.db")
+    url = URL.create(
+        drivername="postgresql+psycopg2",
+        username=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASS"),
+        host=os.getenv("DB_HOST"),
+        database=os.getenv("DB_NAME"),
+    )
+    return create_engine(url, echo=True)
 
 
 def createdb_and_tables():

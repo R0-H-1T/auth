@@ -99,7 +99,7 @@ def validate_user_token(token, session: Session):
     token_in_blocklist(claims)
 
     db_user = session.exec(
-        select(UserDB).where(UserDB.email == claims.get("sub"))
+        select(UserDB).where(UserDB.id == claims.get("sub"))
     ).first()
 
     if db_user is None:

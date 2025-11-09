@@ -69,3 +69,12 @@ returned to user
 When user signs out [/signout]
     Access token is added to redis - blacklist token in redis using the JTI claim.
     
+SECRET=1e44f1b78146dd8dca235a0cb06c78858e6171384f079662f78d88b9e5d089d3
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MIN=10
+REFRESH_TOKEN_EXPIRE_MIN=20
+TEST_DB_NAME=test.db
+DB_HOST=localhost
+DB_USER=postgres
+DB_PASS=1226
+DB_NAME=quiz
